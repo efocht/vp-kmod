@@ -501,7 +501,7 @@ int vp_v2p_blk(struct vp_blk *v, int pin_down, struct page_list *hash_list_head)
 	int i, ret = 0;
 	int gup_pinned = 0;
 	int huge = 0;
-	uint64_t offs = 0UL, va, *pa;
+	uint64_t offs = 0UL, va;
 	uint64_t vpfn_min, vpfn_max;
 	uint64_t pa[VP_MAXBULK];
 	struct pid *pid;
