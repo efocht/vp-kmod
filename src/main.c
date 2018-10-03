@@ -74,11 +74,11 @@ static struct miscdevice v2p_dev = {
 #endif
 };
 
-#define vp_trace() dev_dbg(v2p_dev.this_device, "trace")
-#define vp_dbg(fmt, args...) dev_dbg(v2p_dev.this_device, fmt, ## args)
-#define vp_err(fmt, args...) dev_err(v2p_dev.this_device, fmt, ## args)
-#define vp_info(fmt, args...) dev_info(v2p_dev.this_device, fmt, ## args)
-#define vp_warn(fmt, args...) dev_warn(v2p_dev.this_device, fmt, ## args)
+#define vp_trace() dev_dbg(v2p_dev.this_device, "trace %s", __FUNCTION__)
+#define vp_dbg(fmt, args...) dev_dbg(v2p_dev.this_device, "%s "fmt, __FUNCTION__, ## args)
+#define vp_err(fmt, args...) dev_err(v2p_dev.this_device, "%s "fmt, __FUNCTION__, ## args)
+#define vp_info(fmt, args...) dev_info(v2p_dev.this_device, "%s "fmt, __FUNCTION__, ## args)
+#define vp_warn(fmt, args...) dev_warn(v2p_dev.this_device, "%s "fmt, __FUNCTION__, ## args)
 
 /**
  * @brief Release (decrement reference count) single page which was
@@ -100,16 +100,16 @@ int vp_page_release(unsigned long pa, struct page_list *hash_list_head)
 
 	vp_trace();
 
-	/* Check if page related to this physical address is exists */
+	/* Check if page related to this physical address exists */
 	pfn = pa >> PAGE_SHIFT;
 	if (page_is_ram(pfn) && !pfn_valid(pfn)) {
-		vp_dbg("pfn_valid() returns false (pfn = %lx).\n", pfn);
+		vp_dbg("pfn_valid() returns false (pfn = %lx).", pfn);
 		return -EINVAL;
 	}
 
 	pfnpage = pfn_to_page(pfn);
 	if (!pfnpage) {
-		vp_dbg("pfn_to_page() returns NULL (pfn = %lx).\n", pfn);
+		vp_dbg("pfn_to_page() returns NULL (pfn = %lx).", pfn);
 		return -EINVAL;
 	}
 
@@ -119,7 +119,7 @@ int vp_page_release(unsigned long pa, struct page_list *hash_list_head)
 		hlist_for_each_entry_safe(gup_page, n, hash_head, list) {
 			if (gup_page->page == pfnpage) {
 				put_page(gup_page->page);
-				vp_dbg("pfn(0x%lx) page count = %d\n",
+				vp_dbg("pfn(0x%lx) page count = %d",
 						page_to_pfn(gup_page->page),
 						page_count(gup_page->page));
 				hash_del(&gup_page->list);
@@ -131,6 +131,75 @@ int vp_page_release(unsigned long pa, struct page_list *hash_list_head)
 	return -ESRCH;
 }
 EXPORT_SYMBOL(vp_page_release);
+
+/**
+ * @brief Release (decrement reference count) of pages which was
+ * pinned down by this module
+ *
+ * @param pa: Array of physical addresses of pages
+ * @param naddr: number of pages in the array
+ * @param hash_list_head: pointer to hash holding the data
+ *
+ * @return 0 on success.
+ *         -EINVAL on invalid argument.
+ *         -ESRCH when the page is not pinned down by this module.
+ */
+int vp_page_release_blk(uint64_t *pa, int npages, struct page_list *hash_list_head)
+{
+	int i, err;
+	unsigned long pfn;
+	uint64_t pa_last = 0UL;
+	struct page *pfnpage;
+	struct hlist_node *n;
+	struct vp_gup_page *gup_page;
+	struct hlist_head *hash_head;
+
+	vp_trace();
+	for (i = 0; i < npages; i++) {
+		/* avoid duplicates. is probably not needed any more */
+		if (pa_last != pa[i])
+			pa_last = pa[i];
+		else
+			continue;
+		/* Check if page related to this physical address exists */
+		pfn = pa_last >> PAGE_SHIFT;
+		if (page_is_ram(pfn) && !pfn_valid(pfn)) {
+			printk(KERN_ERR "pfn_valid() returns false (pfn = %lx).\n", pfn);
+			return -ENOMEM;
+		}
+	
+		pfnpage = pfn_to_page(pfn);
+		if (!pfnpage) {
+			printk(KERN_ERR "pfn_to_page() returns NULL (pfn = %lx).\n", pfn);
+			return -EINVAL;
+		}
+	
+		hash_head =
+			&hash_list_head->head[hash_min(pfn, HASH_BITS(hash_list_head->head))];
+		if (hash_head->first) {
+			err = -ESRCH;
+			hlist_for_each_entry_safe(gup_page, n, hash_head, list) {
+				if (gup_page->page == pfnpage) {
+					put_page(gup_page->page);
+					vp_dbg("pfn(0x%lx) page count = %d\n",
+					       page_to_pfn(gup_page->page),
+					       page_count(gup_page->page));
+					hash_del(&gup_page->list);
+					kfree(gup_page);
+					err = 0;
+					break;
+				}
+			}
+			if (err) {
+				printk(KERN_ERR "release_blk pfn %lx not found (i=%d)\n",
+				       pfn, i);
+				break;
+			}
+		}
+	}
+	return err;
+}
+EXPORT_SYMBOL(vp_page_release_blk);
 
 /**
  * @brief Relase (decrement reference count) all pages which were pinned
@@ -176,7 +245,7 @@ static int vp_page_to_pa(struct page *page, unsigned long va, unsigned long *pa)
 
 	pfn = page_to_pfn(page);
 	if (page_is_ram(pfn) && !pfn_valid(pfn)) {
-		vp_dbg("pfn_valid() returns false (pfn = %lx).\n", pfn);
+		vp_dbg("pfn_valid() returns false (pfn = %lx).", pfn);
 		return -EINVAL;
 	}
 
@@ -213,12 +282,12 @@ static int vp_add_gup_page_list(struct page *page,
 	pfn = page_to_pfn(gup_page->page);
 	hash_add(hash_list_head->head, &gup_page->list, pfn);
 	vp_dbg("pfn(0x%lx) page count = %d\n",
-			pfn, page_count(gup_page->page));
+	       pfn, page_count(gup_page->page));
 
 	return 0;
 }
 
-/* Translate virtual address (VM_PFNMAP) into phisical address */
+/* Translate virtual address (VM_PFNMAP) into physical address */
 static int vp_walk_page(unsigned long va, unsigned long *pa,
 		struct mm_struct *mm)
 {
@@ -415,6 +484,206 @@ err_after_v2p:
 	return -EFAULT;
 }
 EXPORT_SYMBOL(vp_v2p_from_user);
+
+/**
+ * @brief Translate virtual address into physical address
+ *
+ * @param[in] v: pid, vaddr, paddr, write flag
+ * @param pin_down: 1 if pages will be written. 0 if pages won't be written.
+ *
+ * @return 0 on success.
+ *         -ESRCH if related page structure is not found.
+ *         -ENOMEM on memory allocation failure.
+ *         -errno if failed to get_user_pages().
+ */
+int vp_v2p_blk(struct vp_blk *v, int pin_down, struct page_list *hash_list_head)
+{
+	int i, ret = 0;
+	int gup_pinned = 0;
+	int huge = 0;
+	uint64_t offs = 0UL, va, *pa;
+	uint64_t vpfn_min, vpfn_max;
+	uint64_t pa[VP_MAXBULK];
+	struct pid *pid;
+	struct task_struct *task;
+	struct mm_struct *mm;
+	struct vm_area_struct *vma;
+	struct page *pages[VP_MAXBULK];
+
+	if (v->maxpages > VP_MAXBULK)
+		v->maxpages = VP_MAXBULK;
+
+	pid = find_get_pid(v->pid);
+	if (!pid)
+		return -ESRCH;
+
+	task = get_pid_task(pid, PIDTYPE_PID);
+	put_pid(pid);
+	if (!task)
+		return -ESRCH;
+
+	ret = check_vsyscall_area(v->vaddr);
+	if (ret != 0)
+		return ret;
+
+	mm = get_task_mm(task);
+	put_task_struct(task);
+	if (!mm)
+		return -ESRCH;
+
+	/* mmap_sem must be held during get_user_pages() */
+	down_read(&mm->mmap_sem);
+	vma = find_vma(mm, v->vaddr);
+	if (!vma || (vma->vm_mm && vma->vm_start
+		     == (long)vma->vm_mm->context.vdso)) {
+		mmput(mm);
+		vp_err("pid(%d) failed to find vma for block va=%p",
+		       v->pid, (void *)v->vaddr);
+		return -EINVAL;
+	}
+	if (vma->vm_end < v->vaddr + v->length)
+		v->length = vma->vm_end - v->vaddr;
+
+	/* small or huge pages? */
+	if (vma->vm_flags & VM_HUGETLB) {
+		v->pgsz = HPAGE_SIZE;
+		huge = 1;
+	} else
+		v->pgsz = PAGE_SIZE;
+
+	/* allocate paddr array, if needed */
+	vpfn_min = v->vaddr >> (huge ? HPAGE_SHIFT : PAGE_SHIFT);
+	vpfn_max = (v->vaddr + v->length - 1) >> (huge ? HPAGE_SHIFT : PAGE_SHIFT);
+	v->npages = vpfn_max - vpfn_min + 1;
+	if (v->npages > v->maxpages) {
+		v->npages = v->maxpages;
+		v->length = v->pgsz - (v->vaddr & (v->pgsz - 1)) +
+			(v->pgsz * (v->npages - 1));
+	}
+	va = v->vaddr & ~(v->pgsz - 1);
+
+	/*
+	 * In the case of VM_PFNMAP, just walk the page table and
+	 * acquire physical address.
+	 *
+	 * TODO: is this correct for huge pages?
+	 */
+	if (vma->vm_flags & VM_PFNMAP) {
+		ret = 0;
+		offs = 0;
+		for (i = 0; i < v->npages; i++, offs += v->pgsz) {
+			ret |= vp_walk_page(va + offs, (unsigned long *)&pa[i], mm);
+		}
+		if (!ret) {
+			v->pfnmap = 1;
+			vp_dbg("pfnmap block pid(%d) va=%p",
+				 v->pid, (void *)v->vaddr);
+		}
+		up_read(&mm->mmap_sem);
+		goto out_gup;
+	}
+	v->pfnmap = 0;
+
+	/* Pin down pages */
+	gup_pinned = vp_gup(task, mm, va, v->npages, v->write, 0, pages, NULL);
+	up_read(&mm->mmap_sem);
+	if (gup_pinned != v->npages) {
+		vp_err("Failed to pin down pages\n");
+		vp_err("ret=%d, pid=%d, npages=%d, address=%p, write=%d\n",
+		       gup_pinned, v->pid, v->npages, (void *)v->vaddr, v->write);
+		if (gup_pinned < 0) {
+			ret = gup_pinned;
+		} else { /* gup_pinned == 0 */
+			ret = -ENOMEM;
+		}
+		goto out_gup;
+	}
+	for (i = 0, offs = 0UL; i < v->npages; i++, offs += v->pgsz) {
+		ret = vp_page_to_pa(pages[i], va + offs, (unsigned long *)&pa[i]);
+		if (ret)
+			goto err_gup;
+		//if (i < 10)
+		//	vp_dbg("i=%d va=%p pa=%p", i, (void *)(va+offs), (void *)pa[i]);
+	}
+
+	/* transfer phys address array to user space */
+	ret = copy_to_user((void __user *)v->paddr, (void *)pa,
+			   v->npages * sizeof(uint64_t));
+	if (ret) {
+		printk(KERN_ERR "copy_to_user failed!? pid(%d) va=%p\n",
+		       v->pid, (void *)v->vaddr);
+		goto err_gup;
+	}
+	
+	if (pin_down) {
+		ret = 0;
+		for (i = 0; i < v->npages; i++)
+			ret |= vp_add_gup_page_list(pages[i], hash_list_head);
+		/* If success, keep the page pinned */
+		if (ret)
+			goto err_gup;
+		goto out_gup;
+	}
+
+	if (pin_down)
+		goto out_gup;
+err_gup:
+	for (i = 0; i < v->npages; i++)
+		if (pages[i])
+			put_page(pages[i]);
+out_gup:
+	mmput(mm);
+	if (v->npages > 96) {
+		kfree(pa);
+		kfree(pages);
+	}
+	return ret;
+}
+EXPORT_SYMBOL(vp_v2p_blk);
+
+/**
+ * @brief Multiple virtual addresses into physicall addresses from user-space
+ *
+ * @param[in, out] uptr: user space address pointer
+ * @param pin_down: 1 if page will be pinned down.
+ *
+ * @return 0 on success.
+ *         -EFAULT on memory copy failure between user-space and kernel-space.
+ *         -errno if failed in vp_v2p_blk().
+ */
+int vp_v2p_blk_from_user(struct vp_blk __user *uptr, int pin_down,
+			 struct page_list *hash_list_head)
+{
+	int ret;
+	struct vp_blk vp_k;
+
+	ret = copy_from_user(&vp_k, (void __user *)uptr, sizeof(struct vp_blk));
+	if (ret)
+		return -EFAULT;
+
+	ret = vp_v2p_blk(&vp_k, pin_down, hash_list_head);
+	if (ret)
+		return ret;
+
+	ret = put_user(vp_k.pfnmap, &uptr->pfnmap);
+	if (ret)
+		goto err_after_v2pm;
+	ret = put_user(vp_k.length, &uptr->length);
+	if (ret)
+		goto err_after_v2pm;
+	ret = put_user(vp_k.npages, &uptr->npages);
+	if (ret)
+		goto err_after_v2pm;
+	ret = put_user(vp_k.pgsz, &uptr->pgsz);
+	if (ret)
+		goto err_after_v2pm;
+	return 0;
+
+err_after_v2pm:
+	/* pages should be unpinned from userspace if error */
+	return -EFAULT;
+}
+EXPORT_SYMBOL(vp_v2p_blk_from_user);
 
 #ifdef DEBUG
 long vp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
