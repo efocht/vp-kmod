@@ -41,14 +41,41 @@ struct vp {
 			 */
 };
 
+struct vpm {
+	pid_t pid;	/*!< PID which has the virtual address to translate */
+	int write;	/*!< whether pages will be written to */
+	int pfnmap;	/*!< 1 if vm_flags has VM_PFNMAP */
+	int naddr;	/*!< number of addresses to translate & pin */
+	uint64_t *virt;	/*!< Virtual address to translate */
+	uint64_t *phys;	/*!< Physical address corresponding to
+			 * virtual address of pid
+			 */
+};
+
+struct vp_blk {
+	pid_t pid;	/*!< PID which has the virtual address to translate */
+	int write;	/*!< whether pages will be written to */
+	uint64_t vaddr;  /*!< start virtual address value */
+	uint64_t length; /*!< length of block */
+	uint64_t *paddr; /*!< array with physical address of pages */
+	uint32_t npages;
+	uint32_t maxpages;
+	int pfnmap;	/*!< 1 if vm_flags has VM_PFNMAP */
+	int pgsz;	 /*!< page size */
+};
+
 /* ioctl commands */
 #define VP_IOC_MAGIC	0xF6
 #define VP_CMD_V2P		_IOWR(VP_IOC_MAGIC, 0, struct vp)
 #define VP_CMD_V2P_PIN_DOWN	_IOWR(VP_IOC_MAGIC, 1, struct vp)
 #define VP_CMD_RELEASE		_IOR(VP_IOC_MAGIC, 2, unsigned long)
 #define VP_CMD_RELEASE_ALL	_IO(VP_IOC_MAGIC, 3)
+#define VP_CMD_V2PM		_IOWR(VP_IOC_MAGIC, 4, struct vpm)
+#define VP_CMD_V2PM_PIN_DOWN	_IOWR(VP_IOC_MAGIC, 5, struct vpm)
 
 #define HASH_LIST_BITS 11
+
+#define VP_MAXBULK 100
 
 #ifdef __KERNEL__
 struct page_list {
@@ -57,8 +84,11 @@ struct page_list {
 int vp_v2p(struct vp *v, int pin_down, struct page_list *hash_list_head);
 int vp_v2p_from_user(struct vp __user *uptr, int pin_down,
 		struct page_list *hash_list_head);
+int vp_v2p_blk_from_user(struct vp_blk __user *uptr, int pin_down,
+			 struct page_list *hash_list_head);
 int vp_page_release(unsigned long pa, struct page_list *hash_list_head);
 void vp_page_release_all(struct page_list *hash_list_head);
+int vp_page_release_blk(uint64_t *pa, int npages, struct page_list *hash_list_head);
 #endif /* __KERNEL__ */
 
 #endif /*V2P_VP_H_INCLUDE_*/
