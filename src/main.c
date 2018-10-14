@@ -633,10 +633,6 @@ err_gup:
 			put_page(pages[i]);
 out_gup:
 	mmput(mm);
-	if (v->npages > 96) {
-		kfree(pa);
-		kfree(pages);
-	}
 	return ret;
 }
 EXPORT_SYMBOL(vp_v2p_blk);
