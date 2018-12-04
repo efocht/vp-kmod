@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 AC_PREREQ([2.69])
-AC_INIT([vp-kmod], [1.2.2])
+AC_INIT([vp-kmod], [1.3.2])
 AC_CONFIG_SRCDIR([src/main.c])
 AM_INIT_AUTOMAKE([foreign])
 AC_CONFIG_MACRO_DIR([m4])
@@ -47,5 +47,9 @@ AC_C_INLINE
 
 # Final output
 AC_CONFIG_FILES([Makefile
-		 vp-kmod.spec])
+		 vp-kmod.spec
+		 debian/rules
+		 debian/control
+		 debian/vp-kmod.install
+		 debian/vp-kmod-dev.install])
 AC_OUTPUT

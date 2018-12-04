@@ -22,8 +22,9 @@ ACLOCAL_AMFLAGS = -I m4
 include_HEADERS = src/vp.h
 EXTRA_DIST = src/Makefile src/main.c src/compat.c src/compat.h src/vp.h \
 	     src/vp.conf src/commitid.h dracut/vp.conf \
-	     vp-kmod.spec
-bits=11
+	     vp-kmod.spec \
+	     debian
+bits=16
 
 src/commitid.h:
 	echo "#define COMMITID \"`git log --pretty=format:"%H" -n 1`\"" >> $@
@@ -49,7 +50,7 @@ install-exec-hook: src/vp.ko
 	$(INSTALL_DATA) $(builddir)/dracut/vp.conf $(DESTDIR)/etc/dracut.conf.d/
 
 clean-local:
-	rm src/vp.h
+	rm -rf src/vp.h
 	$(MAKE) -C $(KERNEL_SRC) M=$(abs_top_builddir)/src clean
 
 rpm: dist

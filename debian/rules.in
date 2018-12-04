@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+SHELL=/bin/bash
+export DH_VERBOSE = 1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all,-format
+export DEB_VENDOR = "NEC Corporation"
+export PREFIX = "@prefix@"
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	autoreconf -i --force
+	dh_auto_configure -- --prefix=${PREFIX} \
+			--with-release-id=@RELEASE@
+	chmod a+x debian/rules
+
+override_dh_install:
+	dh_install
+

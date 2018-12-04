@@ -1,0 +1,12 @@
+#/bin/bash
+set -e
+
+/sbin/depmod -a
+if modinfo ve_drv > /dev/null 2>&1;
+then
+	/sbin/modprobe -r ve_drv
+fi
+if modinfo vp > /dev/null 2>&1;
+then
+	/sbin/modprobe -r vp
+fi

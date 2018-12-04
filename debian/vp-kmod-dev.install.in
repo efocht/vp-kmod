@@ -1,0 +1,3 @@
+#%defattr(-,root,root,-)
+.@prefix@/src/ve_kernel/Module.symvers
+.@prefix@/include/*.h

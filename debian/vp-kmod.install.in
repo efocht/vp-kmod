@@ -1,0 +1,4 @@
+#.@sysconfdir@/depmod.d/*
+.@KERNEL_MOD@/*.ko
+.@sysconfdir@/modprobe.d/*.conf
+.@sysconfdir@/dracut.conf.d/*
