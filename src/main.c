@@ -585,7 +585,12 @@ int vp_v2p_blk(struct vp_blk *v, int pin_down, struct page_list *hash_list_head)
 	v->pfnmap = 0;
 
 	/* Pin down pages */
-	gup_pinned = vp_gup(task, mm, va, v->npages, v->write, 0, pages, NULL);
+	if (!huge)
+		gup_pinned = vp_gup(task, mm, va, v->npages, v->write, 0, pages, NULL);
+	else
+		for (i = 0, offs = 0UL; i < v->npages; i++, offs += v->pgsz)
+			gup_pinned += vp_gup(task, mm, va + offs, 1, v->write, 0,
+					     &pages[i], NULL);
 	up_read(&mm->mmap_sem);
 	if (gup_pinned != v->npages) {
 		vp_err("Failed to pin down pages\n");
